@@ -2,6 +2,7 @@ import { Outlet } from "react-router-dom";
 import { BottomNav } from "./BottomNav";
 import { Header } from "./Header";
 import { FloatingActionButton } from "@/components/ui/floating-action-button";
+import { OfflineIndicator } from "./OfflineIndicator";
 import { Suspense } from "react";
 import { LoadingScreen } from "@/components/ui/loading-spinner";
 
@@ -16,6 +17,7 @@ export function MainLayout() {
       </Suspense>
       <BottomNav />
       <FloatingActionButton />
+      <OfflineIndicator />
     </div>
   );
 }

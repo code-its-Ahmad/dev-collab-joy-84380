@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatsCards } from "@/components/analytics/StatsCards";
 import { SalesChart, OrdersChart } from "@/components/analytics/SalesChart";
 import { TopItems } from "@/components/analytics/TopItems";
+import { AIInsightsWidget } from "@/components/analytics/AIInsightsWidget";
 import { Download, Calendar } from "lucide-react";
 import { DatePickerWithRange } from "@/components/ui/date-range-picker";
 import { addDays, format } from "date-fns";
@@ -82,6 +83,8 @@ export default function Analytics() {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
+          <AIInsightsWidget />
+          
           <StatsCards
             totalSales={totalSales}
             totalOrders={totalOrders}
