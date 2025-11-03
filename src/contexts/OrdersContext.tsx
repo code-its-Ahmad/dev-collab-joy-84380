@@ -1,88 +1,152 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from "react";
 import { Order } from "./POSContext";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface OrdersContextType {
   orders: Order[];
-  addOrder: (order: Order) => void;
-  updateOrderStatus: (orderId: string, status: Order["status"]) => void;
-  deleteOrder: (orderId: string) => void;
+  loading: boolean;
+  addOrder: (order: Order) => Promise<void>;
+  updateOrderStatus: (orderId: string, status: Order["status"]) => Promise<void>;
+  deleteOrder: (orderId: string) => Promise<void>;
   getOrdersByStatus: (status: Order["status"]) => Order[];
   getOrderById: (orderId: string) => Order | undefined;
+  refreshOrders: () => Promise<void>;
 }
 
 const OrdersContext = createContext<OrdersContextType | undefined>(undefined);
 
-// Mock initial orders for demo
-const mockOrders: Order[] = [
-  {
-    id: "ORD-001",
-    customerName: "Ahmed Khan",
-    customerPhone: "0300-1234567",
-    tableNumber: "5",
-    items: [
-      { name: "Chicken Biryani", quantity: 2, price: 450 },
-      { name: "Mango Lassi", quantity: 2, price: 150 },
-    ],
-    total: 1200,
-    status: "pending",
-    createdAt: new Date(Date.now() - 300000),
-    paymentMethod: "cash",
-  },
-  {
-    id: "ORD-002",
-    customerName: "Sara Ali",
-    customerPhone: "0321-9876543",
-    items: [{ name: "Beef Nihari", quantity: 1, price: 650 }],
-    total: 650,
-    status: "preparing",
-    createdAt: new Date(Date.now() - 900000),
-    paymentMethod: "jazzcash",
-  },
-  {
-    id: "ORD-003",
-    customerName: "Hassan Raza",
-    tableNumber: "12",
-    items: [
-      { name: "Karahi Gosht", quantity: 1, price: 800 },
-      { name: "Chapli Kebab", quantity: 3, price: 350 },
-    ],
-    total: 1850,
-    status: "ready",
-    createdAt: new Date(Date.now() - 1800000),
-    paymentMethod: "easypaisa",
-  },
-];
-
 export function OrdersProvider({ children }: { children: ReactNode }) {
-  const [orders, setOrders] = useState<Order[]>(mockOrders);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const addOrder = useCallback((order: Order) => {
-    setOrders((prev) => [order, ...prev]);
+  const refreshOrders = useCallback(async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("orders")
+        .select(`
+          *,
+          order_items (*)
+        `)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      const transformedOrders: Order[] = (data || []).map((order: any) => ({
+        id: order.order_number,
+        customerName: order.customer_name,
+        customerPhone: order.customer_phone,
+        tableNumber: order.table_number,
+        items: order.order_items.map((item: any) => ({
+          name: item.item_name,
+          quantity: item.quantity,
+          price: item.unit_price,
+          notes: item.notes,
+        })),
+        total: order.total,
+        status: order.status as Order["status"],
+        createdAt: new Date(order.created_at),
+        paymentMethod: order.payment_method as Order["paymentMethod"],
+        notes: order.notes,
+      }));
+
+      setOrders(transformedOrders);
+    } catch (error: any) {
+      toast.error("Failed to fetch orders: " + error.message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const updateOrderStatus = useCallback((orderId: string, status: Order["status"]) => {
-    setOrders((prev) =>
-      prev.map((order) =>
-        order.id === orderId ? { ...order, status } : order
-      )
-    );
-    
-    const statusMessages: Record<Order["status"], string> = {
-      pending: "Order marked as pending",
-      preparing: "Order is now being prepared",
-      ready: "Order is ready for pickup/delivery",
-      completed: "Order completed successfully",
-      cancelled: "Order has been cancelled",
-    };
-    
-    toast.success(statusMessages[status]);
-  }, []);
+  const addOrder = useCallback(async (order: Order) => {
+    try {
+      const { data: orderData, error: orderError } = await supabase
+        .from("orders")
+        .insert({
+          order_number: order.id,
+          customer_name: order.customerName,
+          customer_phone: order.customerPhone,
+          table_number: order.tableNumber,
+          subtotal: order.total,
+          total: order.total,
+          status: order.status,
+          payment_method: order.paymentMethod,
+          payment_status: "pending",
+          notes: order.notes,
+        })
+        .select()
+        .single();
 
-  const deleteOrder = useCallback((orderId: string) => {
-    setOrders((prev) => prev.filter((order) => order.id !== orderId));
-    toast.info("Order deleted");
-  }, []);
+      if (orderError) throw orderError;
+
+      const orderItems = order.items.map((item) => ({
+        order_id: orderData.id,
+        item_name: item.name,
+        quantity: item.quantity,
+        unit_price: item.price,
+        total_price: item.price * item.quantity,
+        notes: item.notes,
+      }));
+
+      const { error: itemsError } = await supabase
+        .from("order_items")
+        .insert(orderItems);
+
+      if (itemsError) throw itemsError;
+
+      await refreshOrders();
+      toast.success(`Order ${order.id} created successfully!`);
+    } catch (error: any) {
+      toast.error("Failed to create order: " + error.message);
+      throw error;
+    }
+  }, [refreshOrders]);
+
+  const updateOrderStatus = useCallback(async (orderId: string, status: Order["status"]) => {
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .update({ 
+          status,
+          completed_at: status === "completed" ? new Date().toISOString() : null
+        })
+        .eq("order_number", orderId);
+
+      if (error) throw error;
+      
+      const statusMessages: Record<Order["status"], string> = {
+        pending: "Order marked as pending",
+        preparing: "Order is now being prepared",
+        ready: "Order is ready for pickup/delivery",
+        completed: "Order completed successfully",
+        cancelled: "Order has been cancelled",
+      };
+      
+      toast.success(statusMessages[status]);
+      await refreshOrders();
+    } catch (error: any) {
+      toast.error("Failed to update order: " + error.message);
+      throw error;
+    }
+  }, [refreshOrders]);
+
+  const deleteOrder = useCallback(async (orderId: string) => {
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .delete()
+        .eq("order_number", orderId);
+
+      if (error) throw error;
+
+      toast.info("Order deleted");
+      await refreshOrders();
+    } catch (error: any) {
+      toast.error("Failed to delete order: " + error.message);
+      throw error;
+    }
+  }, [refreshOrders]);
 
   const getOrdersByStatus = useCallback(
     (status: Order["status"]) => {
@@ -98,15 +162,41 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
     [orders]
   );
 
+  useEffect(() => {
+    refreshOrders();
+
+    // Set up real-time subscription for orders
+    const channel = supabase
+      .channel("orders_changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "orders",
+        },
+        () => {
+          refreshOrders();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [refreshOrders]);
+
   return (
     <OrdersContext.Provider
       value={{
         orders,
+        loading,
         addOrder,
         updateOrderStatus,
         deleteOrder,
         getOrdersByStatus,
         getOrderById,
+        refreshOrders,
       }}
     >
       {children}

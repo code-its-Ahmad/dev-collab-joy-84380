@@ -24,10 +24,10 @@ export function ShoppingCartNew() {
     setPaymentDialogOpen(true);
   };
 
-  const handlePaymentConfirm = (paymentMethod: any, notes?: string) => {
-    const order = createOrder(paymentMethod, notes);
+  const handlePaymentConfirm = async (paymentMethod: any, notes?: string) => {
+    const order = await createOrder(paymentMethod, notes);
     if (order) {
-      addOrder(order);
+      await addOrder(order);
     }
   };
 

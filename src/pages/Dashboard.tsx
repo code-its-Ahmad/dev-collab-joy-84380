@@ -4,14 +4,25 @@ import { Plus, Package, FileText, TrendingUp, AlertCircle, Sparkles, ArrowUpRigh
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useNavigate } from "react-router-dom";
 import { useLanguage } from "@/hooks/useLanguage";
+import { useAnalytics } from "@/hooks/useAnalytics";
+import { useInventory } from "@/contexts/InventoryContext";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { isUrdu } = useLanguage();
+  const { data: analytics, loading: analyticsLoading } = useAnalytics();
+  const { items: inventory, loading: inventoryLoading } = useInventory();
   
   const currentHour = new Date().getHours();
   const greeting = currentHour < 12 ? "Good Morning" : currentHour < 18 ? "Good Afternoon" : "Good Evening";
-  const businessName = "Al-Baik Restaurant";
+  const businessName = "TadbeerPOS";
+
+  const lowStockItems = inventory.filter(item => item.quantity <= item.reorder_level);
+  const expiringItems = inventory.filter(item => {
+    // Mock expiring logic - in real app would check batch expiry dates
+    return Math.random() > 0.9;
+  });
 
   return (
     <div className="container px-4 py-6 space-y-6 max-w-7xl mx-auto animate-fade-in">
@@ -49,11 +60,17 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">₨ 12,450</div>
-            <p className="text-xs text-primary mt-1 flex items-center gap-1">
-              <TrendingUp className="h-3 w-3" />
-              +12% from yesterday
-            </p>
+            {analyticsLoading ? (
+              <Skeleton className="h-8 w-24" />
+            ) : (
+              <>
+                <div className="text-2xl font-bold text-foreground">₨ {analytics.todaySales.toLocaleString()}</div>
+                <p className={`text-xs mt-1 flex items-center gap-1 ${analytics.salesTrend >= 0 ? 'text-primary' : 'text-destructive'}`}>
+                  <TrendingUp className="h-3 w-3" />
+                  {analytics.salesTrend >= 0 ? '+' : ''}{analytics.salesTrend.toFixed(1)}% from yesterday
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -65,11 +82,17 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">48</div>
-            <p className="text-xs text-primary mt-1 flex items-center gap-1">
-              <TrendingUp className="h-3 w-3" />
-              +8 from yesterday
-            </p>
+            {analyticsLoading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <>
+                <div className="text-2xl font-bold text-foreground">{analytics.todayOrders}</div>
+                <p className={`text-xs mt-1 flex items-center gap-1 ${analytics.ordersTrend >= 0 ? 'text-primary' : 'text-destructive'}`}>
+                  <TrendingUp className="h-3 w-3" />
+                  {analytics.ordersTrend >= 0 ? '+' : ''}{analytics.ordersTrend.toFixed(0)} from yesterday
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -81,8 +104,14 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-destructive">5</div>
-            <p className="text-xs text-destructive mt-1">Needs attention</p>
+            {inventoryLoading ? (
+              <Skeleton className="h-8 w-12" />
+            ) : (
+              <>
+                <div className="text-2xl font-bold text-destructive">{lowStockItems.length}</div>
+                <p className="text-xs text-destructive mt-1">Needs attention</p>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -94,7 +123,7 @@ export default function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-primary">42%</div>
+            <div className="text-2xl font-bold text-primary">{analytics.wasteReduction}%</div>
             <p className="text-xs text-muted-foreground mt-1">vs last month</p>
           </CardContent>
         </Card>
@@ -149,31 +178,47 @@ export default function Dashboard() {
         <CardHeader>
           <CardTitle className="font-heading flex items-center justify-between">
             Pending Alerts
-            <span className="bg-destructive text-destructive-foreground text-xs px-2 py-1 rounded-full">3</span>
+            <span className="bg-destructive text-destructive-foreground text-xs px-2 py-1 rounded-full">
+              {lowStockItems.length + expiringItems.length}
+            </span>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex items-start gap-3 p-3 rounded-lg bg-muted">
-            <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground">Tomatoes expiring in 2 days</p>
-              <p className="text-xs text-muted-foreground mt-1">Consider marking down or donating 5kg</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3 p-3 rounded-lg bg-muted">
-            <AlertCircle className="h-5 w-5 text-secondary flex-shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground">Low stock: Rice</p>
-              <p className="text-xs text-muted-foreground mt-1">Reorder recommended before weekend</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3 p-3 rounded-lg bg-muted">
-            <AlertCircle className="h-5 w-5 text-accent flex-shrink-0 mt-0.5" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground">FBR Report Due</p>
-              <p className="text-xs text-muted-foreground mt-1">Monthly tax report due in 5 days</p>
-            </div>
-          </div>
+          {inventoryLoading ? (
+            <>
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
+            </>
+          ) : (
+            <>
+              {expiringItems.slice(0, 2).map((item) => (
+                <div key={item.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted hover:bg-muted/80 transition-colors cursor-pointer" onClick={() => navigate("/inventory")}>
+                  <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground">{item.name} expiring soon</p>
+                    <p className="text-xs text-muted-foreground mt-1">Consider marking down or using soon</p>
+                  </div>
+                </div>
+              ))}
+              {lowStockItems.slice(0, 3).map((item) => (
+                <div key={item.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted hover:bg-muted/80 transition-colors cursor-pointer" onClick={() => navigate("/inventory")}>
+                  <AlertCircle className="h-5 w-5 text-secondary flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground">Low stock: {item.name}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Current: {item.quantity} {item.unit}, Reorder at: {item.reorder_level} {item.unit}
+                    </p>
+                  </div>
+                </div>
+              ))}
+              {lowStockItems.length === 0 && expiringItems.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Package className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No alerts at the moment</p>
+                </div>
+              )}
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

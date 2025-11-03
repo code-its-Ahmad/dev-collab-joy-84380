@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from "react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 export interface MenuItem {
   id: string;
@@ -38,6 +39,8 @@ export interface Order {
 interface POSContextType {
   cartItems: CartItem[];
   customer: Customer | null;
+  menuItems: MenuItem[];
+  loading: boolean;
   addToCart: (item: MenuItem) => void;
   removeFromCart: (itemId: string) => void;
   updateQuantity: (itemId: string, quantity: number) => void;
@@ -46,7 +49,8 @@ interface POSContextType {
   setCustomer: (customer: Customer) => void;
   getCartTotal: () => number;
   getCartCount: () => number;
-  createOrder: (paymentMethod: Order["paymentMethod"], notes?: string) => Order | null;
+  createOrder: (paymentMethod: Order["paymentMethod"], notes?: string) => Promise<Order | null>;
+  fetchMenuItems: () => Promise<void>;
 }
 
 const POSContext = createContext<POSContextType | undefined>(undefined);
@@ -54,6 +58,40 @@ const POSContext = createContext<POSContextType | undefined>(undefined);
 export function POSProvider({ children }: { children: ReactNode }) {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [customer, setCustomerState] = useState<Customer | null>(null);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchMenuItems = useCallback(async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("menu_items")
+        .select(`
+          *,
+          menu_categories (name)
+        `)
+        .eq("available", true)
+        .order("name");
+
+      if (error) throw error;
+
+      const transformedItems: MenuItem[] = (data || []).map((item: any) => ({
+        id: item.id,
+        name: item.name,
+        price: item.price,
+        category: item.menu_categories?.name || "Uncategorized",
+        image: item.image_url,
+        available: item.available,
+        description: item.description,
+      }));
+
+      setMenuItems(transformedItems);
+    } catch (error: any) {
+      toast.error("Failed to fetch menu items: " + error.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   const addToCart = useCallback((item: MenuItem) => {
     if (!item.available) {
@@ -119,7 +157,7 @@ export function POSProvider({ children }: { children: ReactNode }) {
   }, [cartItems]);
 
   const createOrder = useCallback(
-    (paymentMethod: Order["paymentMethod"], notes?: string): Order | null => {
+    async (paymentMethod: Order["paymentMethod"], notes?: string): Promise<Order | null> => {
       if (cartItems.length === 0) {
         toast.error("Cart is empty");
         return null;
@@ -149,17 +187,42 @@ export function POSProvider({ children }: { children: ReactNode }) {
       };
 
       clearCart();
-      toast.success(`Order ${order.id} created successfully!`);
       return order;
     },
     [cartItems, customer, getCartTotal, clearCart]
   );
+
+  useEffect(() => {
+    fetchMenuItems();
+
+    // Set up real-time subscription for menu items
+    const channel = supabase
+      .channel("menu_changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "menu_items",
+        },
+        () => {
+          fetchMenuItems();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchMenuItems]);
 
   return (
     <POSContext.Provider
       value={{
         cartItems,
         customer,
+        menuItems,
+        loading,
         addToCart,
         removeFromCart,
         updateQuantity,
@@ -169,6 +232,7 @@ export function POSProvider({ children }: { children: ReactNode }) {
         getCartTotal,
         getCartCount,
         createOrder,
+        fetchMenuItems,
       }}
     >
       {children}
