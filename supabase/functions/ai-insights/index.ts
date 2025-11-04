@@ -12,6 +12,12 @@ serve(async (req) => {
   }
 
   try {
+    // Verify authentication
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      throw new Error("Missing authorization header");
+    }
+
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -34,15 +40,18 @@ serve(async (req) => {
       supabase
         .from("inventory_items")
         .select("name, quantity, reorder_level, category")
-        .lte("quantity", supabase.rpc("reorder_level"))
         .limit(10),
     ]);
+
+    // Filter low stock items in code since we can't use column comparison directly
+    const lowStockItems = (inventoryResult.data || []).filter(
+      item => item.quantity <= item.reorder_level
+    );
 
     if (ordersResult.error) throw ordersResult.error;
     if (inventoryResult.error) throw inventoryResult.error;
 
     const orders = ordersResult.data || [];
-    const lowStockItems = inventoryResult.data || [];
 
     // Prepare context for AI
     const totalSales = orders.reduce((sum, o) => sum + Number(o.total), 0);
