@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { handleError, handleErrorAndThrow } from "@/lib/errorHandler";
 
 export interface InventoryItem {
   id: string;
@@ -59,7 +60,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
       setItems(data || []);
     } catch (error: any) {
-      toast.error("Failed to fetch inventory: " + error.message);
+      handleError(error, "Fetch inventory");
     } finally {
       setLoading(false);
     }
@@ -78,8 +79,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setItems((prev) => [...prev, data]);
       toast.success(`${item.name} added to inventory`);
     } catch (error: any) {
-      toast.error("Failed to add item: " + error.message);
-      throw error;
+      handleErrorAndThrow(error, "Add inventory item");
     }
   }, []);
 
@@ -97,8 +97,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setItems((prev) => prev.map((item) => (item.id === id ? data : item)));
       toast.success("Item updated successfully");
     } catch (error: any) {
-      toast.error("Failed to update item: " + error.message);
-      throw error;
+      handleErrorAndThrow(error, "Update inventory item");
     }
   }, []);
 
@@ -114,8 +113,7 @@ export function InventoryProvider({ children }: { children: ReactNode }) {
       setItems((prev) => prev.filter((item) => item.id !== id));
       toast.success("Item deleted successfully");
     } catch (error: any) {
-      toast.error("Failed to delete item: " + error.message);
-      throw error;
+      handleErrorAndThrow(error, "Delete inventory item");
     }
   }, []);
 

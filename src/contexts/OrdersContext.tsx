@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useCallback, ReactNode, useEffect 
 import { Order } from "./POSContext";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { handleError, handleErrorAndThrow } from "@/lib/errorHandler";
 
 interface OrdersContextType {
   orders: Order[];
@@ -53,7 +54,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
 
       setOrders(transformedOrders);
     } catch (error: any) {
-      toast.error("Failed to fetch orders: " + error.message);
+      handleError(error, "Fetch orders");
     } finally {
       setLoading(false);
     }
@@ -98,8 +99,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       await refreshOrders();
       toast.success(`Order ${order.id} created successfully!`);
     } catch (error: any) {
-      toast.error("Failed to create order: " + error.message);
-      throw error;
+      handleErrorAndThrow(error, "Create order");
     }
   }, [refreshOrders]);
 
@@ -126,8 +126,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       toast.success(statusMessages[status]);
       await refreshOrders();
     } catch (error: any) {
-      toast.error("Failed to update order: " + error.message);
-      throw error;
+      handleErrorAndThrow(error, "Update order status");
     }
   }, [refreshOrders]);
 
@@ -143,8 +142,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
       toast.info("Order deleted");
       await refreshOrders();
     } catch (error: any) {
-      toast.error("Failed to delete order: " + error.message);
-      throw error;
+      handleErrorAndThrow(error, "Delete order");
     }
   }, [refreshOrders]);
 
