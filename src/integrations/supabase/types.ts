@@ -500,6 +500,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_owner: { Args: { user_id: string }; Returns: boolean }
     }
     Enums: {
       app_role: "owner" | "manager" | "staff"
