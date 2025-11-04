@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useInventory } from "@/contexts/InventoryContext";
 import { useOrders } from "@/contexts/OrdersContext";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatsCards } from "@/components/analytics/StatsCards";
 import { SalesChart, OrdersChart } from "@/components/analytics/SalesChart";
@@ -13,7 +14,7 @@ import { addDays, format } from "date-fns";
 import { DateRange } from "react-day-picker";
 
 export default function Analytics() {
-  const { getLowStockItems } = useInventory();
+  const { getLowStockItems, items: inventory } = useInventory();
   const { orders } = useOrders();
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: addDays(new Date(), -30),
@@ -114,9 +115,30 @@ export default function Analytics() {
         </TabsContent>
 
         <TabsContent value="inventory" className="space-y-6">
-          <div className="text-center py-12">
-            <p className="text-muted-foreground">Inventory analytics coming soon</p>
-          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Inventory Performance</CardTitle>
+              <CardDescription>Stock turnover and valuation metrics</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">Total Inventory Value</p>
+                  <p className="text-2xl font-bold">
+                    ₨ {inventory.reduce((sum, item) => sum + (Number(item.cost_price) * item.quantity), 0).toLocaleString()}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">Total Items</p>
+                  <p className="text-2xl font-bold">{inventory.length}</p>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">Low Stock Items</p>
+                  <p className="text-2xl font-bold text-destructive">{getLowStockItems().length}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

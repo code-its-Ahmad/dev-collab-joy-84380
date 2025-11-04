@@ -1,48 +1,73 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MenuCategories } from "@/components/pos/MenuCategories";
 import { MenuItemsGrid } from "@/components/pos/MenuItemsGrid";
 import { ShoppingCartNew } from "@/components/pos/ShoppingCartNew";
 import { Button } from "@/components/ui/button";
-import { Mic, Scan } from "lucide-react";
+import { Mic, Scan, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { usePOS, MenuItem } from "@/contexts/POSContext";
-
-const mockMenuItems: MenuItem[] = [
-  { id: "1", name: "Chicken Biryani", price: 450, category: "mains", available: true, description: "Aromatic rice with tender chicken" },
-  { id: "2", name: "Beef Nihari", price: 650, category: "mains", available: true, description: "Slow-cooked beef in rich gravy" },
-  { id: "3", name: "Karahi Gosht", price: 800, category: "mains", available: true, description: "Spicy mutton karahi" },
-  { id: "4", name: "Chapli Kebab", price: 350, category: "appetizers", available: true, description: "Traditional Pashtun kebab" },
-  { id: "5", name: "Samosa", price: 50, category: "appetizers", available: true, description: "Crispy fried pastry" },
-  { id: "6", name: "Pakora", price: 100, category: "appetizers", available: false, description: "Mixed vegetable fritters" },
-  { id: "7", name: "Mango Lassi", price: 150, category: "drinks", available: true, description: "Refreshing yogurt drink" },
-  { id: "8", name: "Fresh Lime", price: 100, category: "drinks", available: true, description: "Fresh lime soda" },
-  { id: "9", name: "Gulab Jamun", price: 150, category: "desserts", available: true, description: "Sweet milk solids" },
-  { id: "10", name: "Kheer", price: 120, category: "desserts", available: true, description: "Rice pudding" },
-  { id: "11", name: "Chicken Tikka", price: 400, category: "appetizers", available: true, description: "Grilled marinated chicken" },
-  { id: "12", name: "Seekh Kebab", price: 380, category: "appetizers", available: true, description: "Spiced minced meat kebab" },
-  { id: "13", name: "Daal Makhani", price: 280, category: "mains", available: true, description: "Creamy black lentils" },
-  { id: "14", name: "Palak Paneer", price: 320, category: "mains", available: true, description: "Spinach with cottage cheese" },
-  { id: "15", name: "Butter Naan", price: 60, category: "breads", available: true, description: "Soft leavened bread" },
-  { id: "16", name: "Garlic Naan", price: 80, category: "breads", available: true, description: "Naan with garlic" },
-];
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function POSPageNew() {
-  const { addToCart } = usePOS();
+  const { addToCart, menuItems, fetchMenuItems, loading } = usePOS();
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [isScanning, setIsScanning] = useState(false);
 
-  const filteredItems = mockMenuItems.filter((item) => {
+  useEffect(() => {
+    fetchMenuItems();
+  }, []);
+
+  const filteredItems = menuItems.filter((item) => {
     const matchesCategory = selectedCategory === "all" || item.category === selectedCategory;
     const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
+    return matchesCategory && matchesSearch && item.available;
   });
 
   const handleVoiceInput = () => {
-    toast.info("Voice input feature coming soon!");
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.continuous = false;
+      
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setSearchQuery(transcript);
+        toast.success(`Searching for: ${transcript}`);
+      };
+      
+      recognition.onerror = () => {
+        toast.error("Voice input failed. Please try again.");
+      };
+      
+      recognition.start();
+      toast.info("Listening...");
+    } else {
+      toast.error("Voice input not supported in this browser");
+    }
   };
 
-  const handleBarcodeScan = () => {
-    toast.info("Barcode scanner feature coming soon!");
+  const handleBarcodeScan = async () => {
+    setIsScanning(true);
+    try {
+      // Simulate barcode scanning - in production, this would use camera API
+      const barcodeResult = prompt("Enter barcode number (or scan):");
+      if (barcodeResult) {
+        // Search for item by barcode
+        const item = menuItems.find(i => i.id === barcodeResult);
+        if (item) {
+          addToCart(item);
+          toast.success(`Added ${item.name} to cart`);
+        } else {
+          toast.error("Item not found");
+        }
+      }
+    } catch (error) {
+      toast.error("Barcode scanning failed");
+    } finally {
+      setIsScanning(false);
+    }
   };
 
   return (
@@ -79,12 +104,20 @@ export default function POSPageNew() {
 
       {/* Center - Menu Items */}
       <div className="flex-1 overflow-y-auto p-4">
-        <MenuItemsGrid
-          items={filteredItems}
-          onAddToCart={addToCart}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-        />
+        {loading ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {[...Array(8)].map((_, i) => (
+              <Skeleton key={i} className="h-48 w-full" />
+            ))}
+          </div>
+        ) : (
+          <MenuItemsGrid
+            items={filteredItems}
+            onAddToCart={addToCart}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+          />
+        )}
       </div>
 
       {/* Right Sidebar - Shopping Cart */}

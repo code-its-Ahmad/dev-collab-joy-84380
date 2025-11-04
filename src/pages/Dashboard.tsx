@@ -19,10 +19,13 @@ export default function Dashboard() {
   const businessName = "TadbeerPOS";
 
   const lowStockItems = inventory.filter(item => item.quantity <= item.reorder_level);
+  
+  // Calculate expiring items from inventory batches
   const expiringItems = inventory.filter(item => {
-    // Mock expiring logic - in real app would check batch expiry dates
-    return Math.random() > 0.9;
-  });
+    // In real app, would query inventory_batches table
+    // For now, showing items with very low stock as "expiring soon"
+    return item.quantity > 0 && item.quantity <= Math.ceil(item.reorder_level * 0.5);
+  }).slice(0, 3);
 
   return (
     <div className="container px-4 py-6 space-y-6 max-w-7xl mx-auto animate-fade-in">

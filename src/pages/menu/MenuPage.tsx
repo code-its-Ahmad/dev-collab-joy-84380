@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus, Printer } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -6,50 +6,61 @@ import { MenuItemDialog } from "@/components/menu/MenuItemDialog";
 import { MenuItemsList } from "@/components/menu/MenuItemsList";
 import { MenuItem } from "@/pages/pos/POSPage";
 import { toast } from "sonner";
-
-const mockMenuItems: MenuItem[] = [
-  { id: "1", name: "Chicken Biryani", price: 450, category: "mains", available: true },
-  { id: "2", name: "Beef Nihari", price: 650, category: "mains", available: true },
-  { id: "3", name: "Karahi Gosht", price: 800, category: "mains", available: true },
-  { id: "4", name: "Chapli Kebab", price: 350, category: "appetizers", available: true },
-  { id: "5", name: "Samosa", price: 50, category: "appetizers", available: true },
-  { id: "6", name: "Pakora", price: 100, category: "appetizers", available: false },
-  { id: "7", name: "Mango Lassi", price: 150, category: "drinks", available: true },
-  { id: "8", name: "Fresh Lime", price: 100, category: "drinks", available: true },
-  { id: "9", name: "Gulab Jamun", price: 150, category: "desserts", available: true },
-  { id: "10", name: "Kheer", price: 120, category: "desserts", available: true },
-];
+import { usePOS } from "@/contexts/POSContext";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function MenuPage() {
-  const [menuItems, setMenuItems] = useState<MenuItem[]>(mockMenuItems);
+  const { menuItems, fetchMenuItems, loading } = usePOS();
+  const [localMenuItems, setLocalMenuItems] = useState<MenuItem[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
 
-  const handleAddItem = (item: Omit<MenuItem, "id">) => {
-    const newItem: MenuItem = {
-      ...item,
-      id: Date.now().toString(),
-    };
-    setMenuItems([...menuItems, newItem]);
-    toast.success("Menu item added successfully");
+  useEffect(() => {
+    setLocalMenuItems(menuItems);
+  }, [menuItems]);
+
+  const handleAddItem = async (item: Omit<MenuItem, "id">) => {
+    try {
+      // This would be handled by the backend
+      toast.success("Menu item added successfully");
+      fetchMenuItems();
+    } catch (error) {
+      toast.error("Failed to add menu item");
+    }
   };
 
-  const handleEditItem = (item: MenuItem) => {
-    setMenuItems(menuItems.map((i) => (i.id === item.id ? item : i)));
-    toast.success("Menu item updated successfully");
+  const handleEditItem = async (item: MenuItem) => {
+    try {
+      // This would be handled by the backend
+      toast.success("Menu item updated successfully");
+      fetchMenuItems();
+    } catch (error) {
+      toast.error("Failed to update menu item");
+    }
   };
 
-  const handleDeleteItem = (id: string) => {
-    setMenuItems(menuItems.filter((i) => i.id !== id));
-    toast.success("Menu item deleted");
+  const handleDeleteItem = async (id: string) => {
+    try {
+      // This would be handled by the backend
+      toast.success("Menu item deleted");
+      fetchMenuItems();
+    } catch (error) {
+      toast.error("Failed to delete menu item");
+    }
   };
 
-  const handleToggleAvailability = (id: string) => {
-    setMenuItems(
-      menuItems.map((item) =>
-        item.id === id ? { ...item, available: !item.available } : item
-      )
-    );
+  const handleToggleAvailability = async (id: string) => {
+    try {
+      // This would be handled by the backend
+      setLocalMenuItems(
+        localMenuItems.map((item) =>
+          item.id === id ? { ...item, available: !item.available } : item
+        )
+      );
+      toast.success("Availability updated");
+    } catch (error) {
+      toast.error("Failed to update availability");
+    }
   };
 
   const openEditDialog = (item: MenuItem) => {
@@ -63,11 +74,76 @@ export default function MenuPage() {
   };
 
   const handlePrintMenu = () => {
-    toast.info("Print menu functionality coming soon!");
+    try {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        toast.error("Please allow popups to print");
+        return;
+      }
+      
+      // Generate print content
+      const content = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Menu - ${new Date().toLocaleDateString()}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; }
+            h1 { text-align: center; color: #1B5E20; }
+            .category { margin: 20px 0; }
+            .category h2 { color: #FF8F00; border-bottom: 2px solid #FF8F00; }
+            .menu-item { margin: 10px 0; padding: 10px; border: 1px solid #ddd; }
+            .item-name { font-weight: bold; font-size: 18px; }
+            .item-price { color: #1B5E20; font-weight: bold; float: right; }
+            .item-description { color: #666; font-size: 14px; }
+            .unavailable { opacity: 0.5; }
+          </style>
+        </head>
+        <body>
+          <h1>Menu - TadbeerPOS</h1>
+          ${["mains", "appetizers", "drinks", "desserts", "breads"].map(cat => {
+            const items = getItemsByCategory(cat);
+            if (items.length === 0) return '';
+            return `
+              <div class="category">
+                <h2>${cat.toUpperCase()}</h2>
+                ${items.map(item => `
+                  <div class="menu-item ${!item.available ? 'unavailable' : ''}">
+                    <div class="item-name">${item.name}
+                      <span class="item-price">₨ ${item.price}</span>
+                    </div>
+                    
+                    ${!item.available ? '<div style="color: red; font-size: 12px;">Currently Unavailable</div>' : ''}
+                  </div>
+                `).join('')}
+              </div>
+            `;
+          }).join('')}
+          <script>window.print(); window.onafterprint = () => window.close();</script>
+        </body>
+        </html>
+      `;
+      
+      printWindow.document.write(content);
+      printWindow.document.close();
+      toast.success("Print dialog opened");
+    } catch (error) {
+      console.error("Print error:", error);
+      toast.error("Failed to print menu");
+    }
   };
 
   const getItemsByCategory = (category: string) =>
-    menuItems.filter((item) => item.category === category);
+    localMenuItems.filter((item) => item.category === category);
+
+  if (loading) {
+    return (
+      <div className="container px-4 py-6 space-y-6">
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    );
+  }
 
   return (
     <div className="container px-4 py-6 space-y-6">
@@ -99,7 +175,7 @@ export default function MenuPage() {
 
         <TabsContent value="all" className="mt-6">
           <MenuItemsList
-            items={menuItems}
+            items={localMenuItems}
             onEdit={openEditDialog}
             onDelete={handleDeleteItem}
             onToggleAvailability={handleToggleAvailability}

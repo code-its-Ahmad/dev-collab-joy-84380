@@ -33,7 +33,82 @@ export function OrderCard({ order, onUpdateStatus }: OrderCardProps) {
   };
 
   const handlePrint = () => {
-    toast.info("Print functionality coming soon!");
+    try {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        toast.error("Please allow popups to print receipt");
+        return;
+      }
+      
+      const content = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Receipt - ${order.id}</title>
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: 'Courier New', monospace; padding: 20px; width: 300px; }
+            .header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 10px; margin-bottom: 10px; }
+            .header h1 { font-size: 20px; }
+            .info { margin: 10px 0; font-size: 12px; }
+            .items { border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 10px 0; }
+            .item { display: flex; justify-content: space-between; margin: 5px 0; font-size: 12px; }
+            .totals { margin-top: 10px; font-size: 14px; }
+            .total-line { display: flex; justify-content: space-between; margin: 3px 0; }
+            .grand-total { font-weight: bold; font-size: 16px; border-top: 2px solid #000; padding-top: 5px; margin-top: 5px; }
+            .footer { text-align: center; margin-top: 20px; font-size: 10px; border-top: 1px dashed #000; padding-top: 10px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>TadbeerPOS</h1>
+            <p>Receipt</p>
+          </div>
+          <div class="info">
+            <div>Order #: ${order.id}</div>
+            <div>Date: ${new Date(order.createdAt).toLocaleString()}</div>
+            <div>Customer: ${order.customerName}</div>
+            ${order.customerPhone ? `<div>Phone: ${order.customerPhone}</div>` : ''}
+          </div>
+          <div class="items">
+            ${order.items.map(item => `
+              <div class="item">
+                <span>${item.quantity}x ${item.name}</span>
+                <span>₨ ${(item.price * item.quantity).toFixed(2)}</span>
+              </div>
+              
+            `).join('')}
+          </div>
+          <div class="totals">
+            <div class="total-line grand-total">
+              <span>Total:</span>
+              <span>₨ ${order.total.toFixed(2)}</span>
+            </div>
+          </div>
+          <div class="info">
+            <div>Payment: ${order.paymentMethod.toUpperCase()}</div>
+          </div>
+          <div class="footer">
+            <p>Thank you for your business!</p>
+            <p>www.tadbeerpos.com</p>
+          </div>
+          <script>
+            window.onload = () => {
+              window.print();
+              setTimeout(() => window.close(), 100);
+            };
+          </script>
+        </body>
+        </html>
+      `;
+      
+      printWindow.document.write(content);
+      printWindow.document.close();
+      toast.success("Receipt sent to printer");
+    } catch (error) {
+      console.error("Print error:", error);
+      toast.error("Failed to print receipt");
+    }
   };
 
   return (

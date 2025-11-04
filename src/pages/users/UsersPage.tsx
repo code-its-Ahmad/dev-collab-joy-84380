@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,61 +23,79 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { UserPlus, Search, Edit, Trash2, Shield, MoreVertical } from "lucide-react";
+import { UserPlus, Search, Edit, Trash2, Shield, Loader2 } from "lucide-react";
 import { useLanguage } from "@/hooks/useLanguage";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface User {
   id: string;
   name: string;
   email: string;
-  phone: string;
+  phone: string | null;
   role: "owner" | "manager" | "staff" | "cashier";
   status: "active" | "inactive";
   createdAt: Date;
+  businessName?: string;
 }
 
-const mockUsers: User[] = [
-  {
-    id: "1",
-    name: "Ahmed Khan",
-    email: "ahmed@restaurant.com",
-    phone: "+92 300 1234567",
-    role: "owner",
-    status: "active",
-    createdAt: new Date("2024-01-01"),
-  },
-  {
-    id: "2",
-    name: "Sara Ali",
-    email: "sara@restaurant.com",
-    phone: "+92 321 9876543",
-    role: "manager",
-    status: "active",
-    createdAt: new Date("2024-02-15"),
-  },
-  {
-    id: "3",
-    name: "Hassan Raza",
-    email: "hassan@restaurant.com",
-    phone: "+92 333 5556677",
-    role: "staff",
-    status: "active",
-    createdAt: new Date("2024-03-10"),
-  },
-];
-
 export default function UsersPage() {
-  const [users] = useState<User[]>(mockUsers);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [newUser, setNewUser] = useState({
     name: "",
     email: "",
     phone: "",
-    role: "staff" as User["role"],
+    password: "",
+    role: "staff" as "owner" | "manager" | "staff" | "cashier",
   });
   const { isUrdu } = useLanguage();
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      const { data: profilesData, error: profilesError } = await supabase
+        .from("profiles")
+        .select("*");
+
+      if (profilesError) throw profilesError;
+
+      const { data: rolesData, error: rolesError } = await supabase
+        .from("user_roles")
+        .select("user_id, role");
+
+      if (rolesError) throw rolesError;
+
+      const usersWithRoles = profilesData.map((profile) => {
+        const userRole = rolesData.find((r) => r.user_id === profile.id);
+        return {
+          id: profile.id,
+          name: profile.display_name,
+          email: profile.id, // We'll need to fetch from auth.users or store email separately
+          phone: profile.phone,
+          role: (userRole?.role || "staff") as "owner" | "manager" | "staff" | "cashier",
+          status: "active" as const,
+          createdAt: new Date(profile.created_at),
+          businessName: profile.business_name,
+        };
+      });
+
+      setUsers(usersWithRoles);
+    } catch (error: any) {
+      console.error("Error fetching users:", error);
+      toast.error("Failed to load users");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredUsers = users.filter(
     (user) =>
@@ -109,18 +127,83 @@ export default function UsersPage() {
     return role.charAt(0).toUpperCase() + role.slice(1);
   };
 
-  const handleAddUser = () => {
-    if (!newUser.name || !newUser.email) {
-      toast.error(isUrdu ? "براہ کرم تمام فیلڈز بھریں" : "Please fill all fields");
+  const handleAddUser = async () => {
+    if (!newUser.name || !newUser.email || !newUser.password) {
+      toast.error(isUrdu ? "براہ کرم تمام فیلڈز بھریں" : "Please fill all required fields");
       return;
     }
-    toast.success(isUrdu ? "صارف شامل کیا گیا" : "User added successfully");
-    setIsAddDialogOpen(false);
-    setNewUser({ name: "", email: "", phone: "", role: "staff" });
+
+    setSubmitting(true);
+    try {
+      // Create user in Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: newUser.email,
+        password: newUser.password,
+        options: {
+          data: {
+            display_name: newUser.name,
+            phone: newUser.phone,
+          },
+        },
+      });
+
+      if (authError) throw authError;
+
+      if (authData.user) {
+        // Assign role - cast to valid app_role
+        const validRoles = ['owner', 'manager', 'staff'];
+        const roleToAssign = validRoles.includes(newUser.role) ? newUser.role : 'staff';
+        
+        const { error: roleError } = await supabase
+          .from("user_roles")
+          .insert([{
+            user_id: authData.user.id,
+            role: roleToAssign as 'owner' | 'manager' | 'staff',
+          }]);
+
+        if (roleError) throw roleError;
+
+        toast.success(isUrdu ? "صارف شامل کیا گیا" : "User added successfully");
+        setIsAddDialogOpen(false);
+        setNewUser({ name: "", email: "", phone: "", password: "", role: "staff" });
+        fetchUsers();
+      }
+    } catch (error: any) {
+      console.error("Error adding user:", error);
+      toast.error(error.message || "Failed to add user");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleDeleteUser = (userId: string) => {
-    toast.success(isUrdu ? "صارف حذف کیا گیا" : "User deleted successfully");
+  const handleDeleteUser = async (userId: string) => {
+    if (!confirm(isUrdu ? "کیا آپ واقعی اس صارف کو حذف کرنا چاہتے ہیں؟" : "Are you sure you want to delete this user?")) {
+      return;
+    }
+
+    try {
+      // Note: Deleting auth.users requires admin privileges
+      // For now, we'll just delete the user_roles and profiles
+      const { error: roleError } = await supabase
+        .from("user_roles")
+        .delete()
+        .eq("user_id", userId);
+
+      if (roleError) throw roleError;
+
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .delete()
+        .eq("id", userId);
+
+      if (profileError) throw profileError;
+
+      toast.success(isUrdu ? "صارف حذف کیا گیا" : "User deleted successfully");
+      fetchUsers();
+    } catch (error: any) {
+      console.error("Error deleting user:", error);
+      toast.error("Failed to delete user");
+    }
   };
 
   return (
@@ -179,10 +262,21 @@ export default function UsersPage() {
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="password">{isUrdu ? "پاس ورڈ" : "Password"} *</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={newUser.password}
+                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                  placeholder={isUrdu ? "پاس ورڈ درج کریں" : "Enter password"}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="role">{isUrdu ? "کردار" : "Role"}</Label>
                 <Select
                   value={newUser.role}
-                  onValueChange={(value: User["role"]) => setNewUser({ ...newUser, role: value })}
+                  onValueChange={(value: "owner" | "manager" | "staff" | "cashier") => setNewUser({ ...newUser, role: value })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -196,10 +290,11 @@ export default function UsersPage() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+              <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} disabled={submitting}>
                 {isUrdu ? "منسوخ" : "Cancel"}
               </Button>
-              <Button onClick={handleAddUser}>
+              <Button onClick={handleAddUser} disabled={submitting}>
+                {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {isUrdu ? "شامل کریں" : "Add User"}
               </Button>
             </DialogFooter>
@@ -228,19 +323,26 @@ export default function UsersPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{isUrdu ? "صارف" : "User"}</TableHead>
-                <TableHead>{isUrdu ? "رابطہ" : "Contact"}</TableHead>
-                <TableHead>{isUrdu ? "کردار" : "Role"}</TableHead>
-                <TableHead>{isUrdu ? "حیثیت" : "Status"}</TableHead>
-                <TableHead>{isUrdu ? "شامل ہوئے" : "Joined"}</TableHead>
-                <TableHead className="text-right">{isUrdu ? "اعمال" : "Actions"}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredUsers.map((user) => (
+          {loading ? (
+            <div className="space-y-4">
+              {[...Array(5)].map((_, i) => (
+                <Skeleton key={i} className="h-16 w-full" />
+              ))}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{isUrdu ? "صارف" : "User"}</TableHead>
+                  <TableHead>{isUrdu ? "رابطہ" : "Contact"}</TableHead>
+                  <TableHead>{isUrdu ? "کردار" : "Role"}</TableHead>
+                  <TableHead>{isUrdu ? "حیثیت" : "Status"}</TableHead>
+                  <TableHead>{isUrdu ? "شامل ہوئے" : "Joined"}</TableHead>
+                  <TableHead className="text-right">{isUrdu ? "اعمال" : "Actions"}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredUsers.map((user) => (
                 <TableRow key={user.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
@@ -288,9 +390,10 @@ export default function UsersPage() {
                     </div>
                   </TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
