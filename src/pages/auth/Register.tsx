@@ -7,6 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
+import { registerSchema } from '@/lib/authValidation';
+import { toast } from 'sonner';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -41,19 +43,25 @@ export default function Register() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (formData.password !== formData.confirmPassword) {
+    if (!acceptTerms) {
+      toast.error("Please accept the terms and conditions");
       return;
     }
 
-    if (!acceptTerms) {
+    // Validate input with Zod
+    const result = registerSchema.safeParse(formData);
+    
+    if (!result.success) {
+      const firstError = result.error.errors[0];
+      toast.error(firstError.message);
       return;
     }
 
     setIsLoading(true);
-    const { error } = await signUp(formData.email, formData.password, {
-      business_name: formData.businessName,
-      display_name: formData.displayName,
-      phone: formData.phone,
+    const { error } = await signUp(result.data.email, result.data.password, {
+      business_name: result.data.businessName,
+      display_name: result.data.displayName,
+      phone: result.data.phone || undefined,
     });
     setIsLoading(false);
 
@@ -139,12 +147,12 @@ export default function Register() {
                     id="password"
                     name="password"
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="Create a password"
+                    placeholder="Create a password (min 8 chars, uppercase, lowercase, number)"
                     value={formData.password}
                     onChange={handleChange}
                     required
                     disabled={isLoading}
-                    minLength={6}
+                    minLength={8}
                   />
                   <button
                     type="button"

@@ -7,6 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
+import { loginSchema } from '@/lib/authValidation';
+import { toast } from 'sonner';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -30,12 +32,17 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email || !password) {
+    // Validate input with Zod
+    const result = loginSchema.safeParse({ email, password });
+    
+    if (!result.success) {
+      const firstError = result.error.errors[0];
+      toast.error(firstError.message);
       return;
     }
 
     setIsLoading(true);
-    const { error } = await signIn(email, password);
+    const { error } = await signIn(result.data.email, result.data.password);
     setIsLoading(false);
 
     if (!error) {

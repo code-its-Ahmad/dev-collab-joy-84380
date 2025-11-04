@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { resetPasswordSchema } from '@/lib/authValidation';
+import { toast } from 'sonner';
 
 export default function ResetPassword() {
   const navigate = useNavigate();
@@ -20,12 +22,17 @@ export default function ResetPassword() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (password !== confirmPassword) {
+    // Validate input with Zod
+    const result = resetPasswordSchema.safeParse({ password, confirmPassword });
+    
+    if (!result.success) {
+      const firstError = result.error.errors[0];
+      toast.error(firstError.message);
       return;
     }
 
     setIsLoading(true);
-    const { error } = await updatePassword(password);
+    const { error } = await updatePassword(result.data.password);
     setIsLoading(false);
 
     if (!error) {
@@ -55,12 +62,12 @@ export default function ResetPassword() {
                 <Input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="Enter new password"
+                  placeholder="Enter new password (min 8 chars, uppercase, lowercase, number)"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   disabled={isLoading}
-                  minLength={6}
+                  minLength={8}
                 />
                 <button
                   type="button"

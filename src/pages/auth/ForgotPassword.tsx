@@ -6,6 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowLeft, Loader2, Mail } from 'lucide-react';
+import { forgotPasswordSchema } from '@/lib/authValidation';
+import { toast } from 'sonner';
 
 export default function ForgotPassword() {
   const { resetPassword } = useAuth();
@@ -17,12 +19,17 @@ export default function ForgotPassword() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email) {
+    // Validate input with Zod
+    const result = forgotPasswordSchema.safeParse({ email });
+    
+    if (!result.success) {
+      const firstError = result.error.errors[0];
+      toast.error(firstError.message);
       return;
     }
 
     setIsLoading(true);
-    const { error } = await resetPassword(email);
+    const { error } = await resetPassword(result.data.email);
     setIsLoading(false);
 
     if (!error) {
