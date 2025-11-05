@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { handleError } from "@/lib/errorHandler";
 
 export interface MenuItem {
   id: string;
@@ -87,7 +88,7 @@ export function POSProvider({ children }: { children: ReactNode }) {
 
       setMenuItems(transformedItems);
     } catch (error: any) {
-      toast.error("Failed to fetch menu items: " + error.message);
+      handleError(error, 'Fetch menu items');
     } finally {
       setLoading(false);
     }

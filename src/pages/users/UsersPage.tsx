@@ -28,13 +28,15 @@ import { useLanguage } from "@/hooks/useLanguage";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
+import { userCreationSchema } from "@/lib/userValidation";
+import { handleError } from "@/lib/errorHandler";
 
 interface User {
   id: string;
   name: string;
   email: string;
   phone: string | null;
-  role: "owner" | "manager" | "staff" | "cashier";
+  role: "owner" | "manager" | "staff";
   status: "active" | "inactive";
   createdAt: Date;
   businessName?: string;
@@ -51,7 +53,7 @@ export default function UsersPage() {
     email: "",
     phone: "",
     password: "",
-    role: "staff" as "owner" | "manager" | "staff" | "cashier",
+    role: "staff" as "owner" | "manager" | "staff",
   });
   const { isUrdu } = useLanguage();
 
@@ -81,7 +83,7 @@ export default function UsersPage() {
           name: profile.display_name,
           email: profile.id, // We'll need to fetch from auth.users or store email separately
           phone: profile.phone,
-          role: (userRole?.role || "staff") as "owner" | "manager" | "staff" | "cashier",
+          role: (userRole?.role || "staff") as "owner" | "manager" | "staff",
           status: "active" as const,
           createdAt: new Date(profile.created_at),
           businessName: profile.business_name,
@@ -120,7 +122,6 @@ export default function UsersPage() {
         owner: "مالک",
         manager: "منیجر",
         staff: "عملہ",
-        cashier: "کیشیئر",
       };
       return urduRoles[role];
     }
@@ -128,8 +129,12 @@ export default function UsersPage() {
   };
 
   const handleAddUser = async () => {
-    if (!newUser.name || !newUser.email || !newUser.password) {
-      toast.error(isUrdu ? "براہ کرم تمام فیلڈز بھریں" : "Please fill all required fields");
+    // Validate user input with Zod
+    try {
+      userCreationSchema.parse(newUser);
+    } catch (error: any) {
+      const firstError = error.errors?.[0]?.message;
+      toast.error(firstError || "Invalid input");
       return;
     }
 
@@ -150,15 +155,12 @@ export default function UsersPage() {
       if (authError) throw authError;
 
       if (authData.user) {
-        // Assign role - cast to valid app_role
-        const validRoles = ['owner', 'manager', 'staff'];
-        const roleToAssign = validRoles.includes(newUser.role) ? newUser.role : 'staff';
-        
+        // Assign role (already validated by Zod)
         const { error: roleError } = await supabase
           .from("user_roles")
           .insert([{
             user_id: authData.user.id,
-            role: roleToAssign as 'owner' | 'manager' | 'staff',
+            role: newUser.role,
           }]);
 
         if (roleError) throw roleError;
@@ -169,8 +171,7 @@ export default function UsersPage() {
         fetchUsers();
       }
     } catch (error: any) {
-      console.error("Error adding user:", error);
-      toast.error(error.message || "Failed to add user");
+      handleError(error, 'Add user');
     } finally {
       setSubmitting(false);
     }
@@ -182,8 +183,21 @@ export default function UsersPage() {
     }
 
     try {
-      // Note: Deleting auth.users requires admin privileges
-      // For now, we'll just delete the user_roles and profiles
+      // First check if user is owner (server-side validation)
+      const { data: roleData, error: roleCheckError } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId)
+        .single();
+
+      if (roleCheckError) throw roleCheckError;
+
+      if (roleData?.role === 'owner') {
+        toast.error(isUrdu ? "مالک کو حذف نہیں کیا جا سکتا" : "Cannot delete owner account");
+        return;
+      }
+
+      // Delete user_roles and profiles
       const { error: roleError } = await supabase
         .from("user_roles")
         .delete()
@@ -201,8 +215,7 @@ export default function UsersPage() {
       toast.success(isUrdu ? "صارف حذف کیا گیا" : "User deleted successfully");
       fetchUsers();
     } catch (error: any) {
-      console.error("Error deleting user:", error);
-      toast.error("Failed to delete user");
+      handleError(error, 'Delete user');
     }
   };
 
@@ -276,7 +289,7 @@ export default function UsersPage() {
                 <Label htmlFor="role">{isUrdu ? "کردار" : "Role"}</Label>
                 <Select
                   value={newUser.role}
-                  onValueChange={(value: "owner" | "manager" | "staff" | "cashier") => setNewUser({ ...newUser, role: value })}
+                  onValueChange={(value: "owner" | "manager" | "staff") => setNewUser({ ...newUser, role: value })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -284,7 +297,6 @@ export default function UsersPage() {
                   <SelectContent>
                     <SelectItem value="manager">{getRoleLabel("manager")}</SelectItem>
                     <SelectItem value="staff">{getRoleLabel("staff")}</SelectItem>
-                    <SelectItem value="cashier">{getRoleLabel("cashier")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
